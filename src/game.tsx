@@ -57,19 +57,93 @@ const setupGame = (): GameState => {
   };
 };
 
+const getCardRankValue = (rank: CardRank, acc?: number): number => {
+  // if (acc && acc < 10 && rank === CardRank.Ace) return 11;
+  switch (rank) {
+    case CardRank.Ace:
+      return 1;
+    case CardRank.Jack:
+    case CardRank.Queen:
+    case CardRank.King:
+      return 10;
+    default:
+      return parseInt(rank);
+  }
+};
+
 //Scoring
 const calculateHandScore = (hand: Hand): number => {
-  return 0;
+  const sortedHand = hand.sort(
+    (a, b) => getCardRankValue(b.rank) - getCardRankValue(a.rank)
+  );
+
+  let currentScore = sortedHand.reduce(
+    (acc, _card) => getCardRankValue(_card.rank, acc) + acc,
+    0
+  );
+
+  let countedAces = sortedHand.filter((_card) => _card.rank === CardRank.Ace);
+
+  for (const _ace of countedAces) {
+    if (currentScore >= 21) return currentScore;
+    if (currentScore <= 11) currentScore += 10;
+  }
+
+  return currentScore;
+};
+
+const isHandBlackJack = (hand: Hand): Boolean => {
+  if (hand.length !== 2) return false;
+
+  if (
+    hand.some((_card: Card) => _card.rank === CardRank.King) &&
+    hand.some((_card: Card) => _card.rank === CardRank.Ace)
+  ) {
+    return true;
+  }
+
+  return false;
 };
 
 const determineGameResult = (state: GameState): GameResult => {
+  const { dealerHand, playerHand } = state;
+
+  const dealerScore = calculateHandScore(dealerHand),
+    isDealerHandBlackJack = isHandBlackJack(dealerHand);
+
+  if (dealerScore > 21) return "player_win";
+
+  const playerScore = calculateHandScore(playerHand),
+    isPlayerHandBlackJack = isHandBlackJack(dealerHand);
+
+  if (playerScore > 21) return "dealer_win";
+
+  if (playerScore > dealerScore) return "player_win";
+  else if (dealerScore > playerScore) return "dealer_win";
+  else if (dealerScore === playerScore) {
+    if (isDealerHandBlackJack && isPlayerHandBlackJack) return "draw";
+    if (playerScore === 21 && dealerScore === 21) return "player_win";
+    return "draw";
+  }
+
   return "no_result";
 };
 
 //Player Actions
 const playerStands = (state: GameState): GameState => {
+  const { dealerHand, cardDeck } = state;
+
+  if (calculateHandScore(dealerHand) >= 17)
+    return {
+      ...state,
+      turn: "dealer_turn",
+    };
+
+  const { card, remaining } = takeCard(cardDeck);
   return {
     ...state,
+    cardDeck: remaining,
+    dealerHand: [...dealerHand, card],
     turn: "dealer_turn",
   };
 };
@@ -82,7 +156,6 @@ const playerHits = (state: GameState): GameState => {
     playerHand: [...state.playerHand, card],
   };
 };
-
 //UI Component
 const Game = (): JSX.Element => {
   const [state, setState] = useState(setupGame());
